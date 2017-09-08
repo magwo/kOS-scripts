@@ -30,6 +30,7 @@ function performAtmosphericThrottleControl {
 }
 
 
+// TODO: Add support for selecting steep or unsteep ascent (0.5, 0.7, 0.8 exponent?)
 function getAtmosphericPitch {
   return (SHIP:altitude*23.3/BODY:atm:height)^0.7*15.
 }
@@ -110,7 +111,7 @@ UNTIL SHIP:APOAPSIS > BODY:atm:height AND SHIP:PERIAPSIS > BODY:atm:height {
     LOCK THROTTLE TO 1.
   } else {
     if SHIP:APOAPSIS < targetAltitude * 0.85 {
-      SET timeToApoapsisPid:setpoint TO 500. // always go full throttle until at reasonable apoapsis
+      SET timeToApoapsisPid:setpoint TO 1500. // always go full throttle until at reasonable apoapsis
     } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.8 {
       SET timeToApoapsisPid:setpoint TO 120.
     } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.5 {

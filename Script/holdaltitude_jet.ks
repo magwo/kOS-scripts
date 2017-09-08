@@ -12,6 +12,10 @@ function shipHasEmptyStage {
 
 //LOCK STEERING TO HEADING(90,90).
 
+// TODO: Set all output ranges to prevent integral windup.
+// TODO: Try some sort of feed-forward of the acceleration/speed values
+// TODO: Smooth out the setpoint changes to avoid Kd freak-out
+
 // TODO: Let these tweak values be a function of TWR
 SET Kp TO 0.06.
 SET Ki TO 0.001.
