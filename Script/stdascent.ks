@@ -1,8 +1,9 @@
-// you must specify both minimum and maximum output directly.
 
+SET MIN_THROTTLE TO 0.0.
+SET MAX_THROTTLE TO 1.0.
 
-SET atmosphereAirspeedPid TO PIDLOOP(0.15, 0.05, 0.03, 0, 1).
-SET timeToApoapsisPid TO PIDLOOP(0.15, 0.05, 0.03, 0, 1).
+SET atmosphereAirspeedPid TO PIDLOOP(0.15, 0.05, 0.03, MIN_THROTTLE, MAX_THROTTLE).
+SET timeToApoapsisPid TO PIDLOOP(0.15, 0.05, 0.03, MIN_THROTTLE, MAX_THROTTLE).
 
 function shipHasEmptyStage {
   LIST ENGINES IN elist.
@@ -17,7 +18,7 @@ function shipHasEmptyStage {
 function desiredAtmosphereSpeed {
   parameter altitude.
   SET altitudeOver12k TO MAX(altitude - 12000, 0). // Increase more agressively
-  return 300 + altitude * (1/100) + altitudeOver12k * (1/100).
+  return 290 + altitude * (1/100) + altitudeOver12k * (1/100).
 }
 
 function performAtmosphericThrottleControl {
@@ -32,32 +33,75 @@ function performAtmosphericThrottleControl {
 
 // TODO: Add support for selecting steep or unsteep ascent (0.5, 0.7, 0.8 exponent?)
 function getAtmosphericPitch {
-  return (SHIP:altitude*23.3/BODY:atm:height)^0.7*15.
+  parameter curve.
+  return 14*(SHIP:altitude*23.3/BODY:atm:height)^curve.
 }
 
-SET hdg TO 90.
+SET hdg TO 90.0.
 SET targetAltitude TO BODY:atm:height * 1.5.
+SET curveExponent TO 0.7.
 
 
-// "Hello World" program for kOS GUI.
-//
-// Create a GUI window
-LOCAL gui IS GUI(200).
-// Add widgets to the GUI
-gui:ADDLABEL("Select target apoapsis:").
-LOCAL label IS gui:ADDLABEL("Hello world!").
-SET label:STYLE:ALIGN TO "CENTER".
-SET label:STYLE:HSTRETCH TO True. // Fill horizontally
-LOCAL ok TO gui:ADDBUTTON("OK").
-LOCAL desiredApoSlider TO gui:ADDHSLIDER(targetAltitude, BODY:atm:height, BODY:atm:height * 3).
 
-function updateSliderDisplay {
-  parameter value.
-  SET label:TEXT TO ROUND(desiredApoSlider:VALUE / 1000) + " km".
+function addSliderControl {
+  parameter gui.
+  parameter description.
+  parameter currentValue.
+  parameter minValue.
+  parameter maxValue.
+  parameter changeHandler.
+
+  print "Max " + maxValue.
+  print "Min " + minValue.
+  print "Current " + currentValue.
+
+  gui:ADDLABEL(description).
+  LOCAL slider TO gui:ADDHSLIDER(currentValue, minValue, maxValue).
+  SET slider:ONCHANGE TO changeHandler.
+  return slider.
 }
-SET desiredApoSlider:ONCHANGE TO updateSliderDisplay@.
-updateSliderDisplay(targetAltitude).
 
+
+LOCAL gui IS GUI(240).
+LOCAL apoapsisLabel IS gui:ADDLABEL("").
+LOCAL hdgLabel IS gui:ADDLABEL("").
+LOCAL curveLabel IS gui:ADDLABEL("").
+
+
+function updateApoDisplay {
+  parameter value.
+  SET targetAltitude TO value.
+  SET apoapsisLabel:TEXT TO ROUND(value / 1000) + " km".
+}
+
+function updateHeadingDisplay {
+  parameter value.
+  SET hdg TO value.
+  SET hdgLabel:TEXT TO ROUND(value) + "°".
+}
+
+function updateCurveDisplay {
+  parameter value.
+  SET curveExponent TO value.
+  print "curve is now " + curveExponent.
+  LOCAL curveDesc TO "Normal".
+  if value < 0.55 {
+    SET curveDesc TO "Steep (for low twr)".
+  } else if value > 0.71 {
+    SET curveDesc TO "Flat (for high twr)".
+  }
+  SET curveLabel:TEXT TO ROUND(value, 3) + " (" + curveDesc + ")".
+}
+
+LOCAL desiredApoSlider TO addSliderControl(gui, "Target apoapsis", targetAltitude, BODY:atm:height, BODY:atm:height * 6, updateApoDisplay@).
+LOCAL desiredHdgSlider TO addSliderControl(gui, "Launch heading", hdg, 0, 360, updateHeadingDisplay@).
+LOCAL desiredCurveSlider TO addSliderControl(gui, "Curve", curveExponent, 0.4, 0.8, updateCurveDisplay@).
+
+updateApoDisplay(targetAltitude).
+updateHeadingDisplay(hdg).
+updateCurveDisplay(curveExponent).
+
+LOCAL ok TO gui:ADDBUTTON("OK").
 gui:SHOW().
 
 LOCAL isDone IS FALSE.
@@ -65,13 +109,12 @@ UNTIL isDone
 {
   if (ok:TAKEPRESS)
     SET isDone TO TRUE.
-  WAIT 0.1. // No need to waste CPU time checking too often.
+  WAIT 0.1.
 }
-print "OK pressed.  Now closing demo.".
-// Hide when done (will also hide if power lost).
 gui:HIDE().
 
-SET targetAltitude TO desiredApoSlider:VALUE.
+
+HUDTEXT( "Standing by to launch to apoapsis of " + targetAltitude + ", initial heading " + hdg + "°", 5, 2, 50, green, true).
 
 WAIT UNTIL SHIP:MAXTHRUST > 0.
 SAS OFF.
@@ -79,9 +122,20 @@ LOCK THROTTLE TO 1.
 HUDTEXT( "Let's go", 3, 2, 50, green, true).
 WAIT 0.2.
 
-UNTIL SHIP:APOAPSIS > BODY:atm:height AND SHIP:PERIAPSIS > BODY:atm:height {
 
+// Antenna deployer
+WHEN SHIP:altitude > BODY:atm:height THEN {
+  AG1 ON.
+  AG1 OFF.
+}
+
+// Main ascent loop
+// TODO: Don't waste electricity
+UNTIL SHIP:APOAPSIS > BODY:atm:height AND SHIP:PERIAPSIS > BODY:atm:height {
   CLEARSCREEN.
+
+  print "hdg is now " + hdg.
+  print "curve is now " + curveExponent.
 
   print "SHIP:APOAPSIS: " + SHIP:APOAPSIS.
   print "SHIP:PERIAPSIS: " + SHIP:PERIAPSIS.
@@ -114,12 +168,12 @@ UNTIL SHIP:APOAPSIS > BODY:atm:height AND SHIP:PERIAPSIS > BODY:atm:height {
       SET timeToApoapsisPid:setpoint TO 1500. // always go full throttle until at reasonable apoapsis
     } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.8 {
       SET timeToApoapsisPid:setpoint TO 120.
-    } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.5 {
-      SET timeToApoapsisPid:setpoint TO 90.
+    } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.55 {
+      SET timeToApoapsisPid:setpoint TO 100.
     } else if SHIP:PERIAPSIS < -BODY:RADIUS * 0.3 {
-      SET timeToApoapsisPid:setpoint TO 60.
+      SET timeToApoapsisPid:setpoint TO 80.
     } else {
-      SET timeToApoapsisPid:setpoint TO 20.
+      SET timeToApoapsisPid:setpoint TO 30.
     }
     print "ETA TO APOAPSIS: " + ETA:APOAPSIS.
     print "DESIRED ETA TO APO: " + timeToApoapsisPid:setpoint.
@@ -127,13 +181,19 @@ UNTIL SHIP:APOAPSIS > BODY:atm:height AND SHIP:PERIAPSIS > BODY:atm:height {
     LOCK THROTTLE TO thrott.
   }
 
-
   // Steering
-  if SHIP:ALTITUDE < body:atm:height * 0.25 {
-    print "getAtmosphericPitch() -> " + getAtmosphericPitch().
-    LOCK STEERING TO HEADING(hdg, 90 - getAtmosphericPitch()).
+
+  if SHIP:ALTITUDE > body:atm:height * 0.03 AND SHIP:ALTITUDE < body:atm:height * 0.17 {
+    // max-Q phase - careful with AoA
+    LOCK STEERING TO SHIP:SRFPROGRADE.
+  }
+  else if SHIP:ALTITUDE < body:atm:height * 0.35 {
+    // Normal atmospheric ascent steering
+    print "getAtmosphericPitch() -> " + getAtmosphericPitch(curveExponent).
+    LOCK STEERING TO HEADING(hdg, 90 - getAtmosphericPitch(curveExponent)).
   }
   else {
+    // Upper atmosphere steering
     LOCK STEERING TO SHIP:PROGRADE.
   }
   WAIT 0.
@@ -143,5 +203,7 @@ print "DONE!".
 
 UNLOCK THROTTLE.
 UNLOCK STEERING.
-WAIT 0.
+WAIT 0.3.
 SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+WAIT 0.3.
+SHUTDOWN.
