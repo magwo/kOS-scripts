@@ -1,1 +1,1 @@
-runpath("0:/stdascent.ks").
+RUN "0:/stdascent.ks".

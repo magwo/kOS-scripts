@@ -1,1 +1,1 @@
-runpath("0:/holdaltitude.ks").
+RUN "0:/holdaltitude.ks".
