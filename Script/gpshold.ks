@@ -12,8 +12,13 @@ function holdCoordinates {
   parameter latPid.
   parameter lngPid.
   parameter maxAngle.
+  parameter targetHeading.
 
   LOCAL current TO SHIP:GEOPOSITION.
+
+  SET SteeringManager:YAWPID:KD TO 1.0.
+  SET SteeringManager:PITCHPID:KD TO 1.2.
+  SET SteeringManager:ROLLPID:KD TO 0.5.
 
 
   print "Instructed to hold   " + coordinates.
@@ -28,5 +33,5 @@ function holdCoordinates {
   LOCAL latSteer TO max(-maxAngle, min(maxAngle, latDiff)).
   LOCAL lngSteer TO max(-maxAngle, min(maxAngle, lngDiff)).
 
-  lock steering to up + r(latSteer, lngSteer, 0).
+  lock steering to up + r(latSteer, lngSteer, targetHeading).
 }

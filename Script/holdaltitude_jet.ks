@@ -61,6 +61,7 @@ SET ABPID TO PIDLOOP(0.1, 0.0, 0.4).
 SET ABPID:SETPOINT TO PID:SETPOINT.
 
 SET targetAltitude TO SHIP:ALTITUDE + 3.
+SET targetHeading TO -90.
 
 function updatePidSetPoints {
   parameter _targetAltitude.
@@ -138,6 +139,12 @@ UNTIL false {
       SET inputPreviousFrame TO false.
     }
 
+    print "Target heading " + targetHeading.
+    print "Pilot roll " + SHIP:CONTROL:PILOTROLL.
+    if SHIP:CONTROL:PILOTROLL <> 0 {
+      SET targetHeading TO targetHeading + SHIP:CONTROL:PILOTROLL * 5.
+    }
+
     LOCAL dryHoverThrottle TO calculateDryHoverThrottle(availableDryThrust).
 
     LOCAL dryTwr TO availableDryThrust / (SHIP:MASS * SHIP:SENSORS:GRAV:MAG).
@@ -177,7 +184,7 @@ UNTIL false {
 
     LOCAL maxAngle TO 10.0 + dryTwr * 6 - 0.02 * SHIP:MASS * SHIP:SENSORS:GRAV:MAG.
     print "maxAngle  " + maxAngle.
-    holdCoordinates(currentHoldPos, latPid, lngPid, maxAngle).
+    holdCoordinates(currentHoldPos, latPid, lngPid, maxAngle, targetHeading).
 
     WAIT 0.01.
 }
